@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CarouselForge — Design scroll-stopping LinkedIn & Instagram carousels, free</title>
+<meta name="description" content="Paste your topic or talking points and forge a beautiful, editorial multi-slide carousel — then export every slide as a high-res PNG. Free, 100% in your browser. Pro: let your own GLM key write the copy." />
+<meta name="theme-color" content="#1b1f6b" />
+
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="CarouselForge — Forge editorial carousels in your browser" />
+<meta property="og:description" content="A magazine-grade carousel designer. Paste points, pick a two-color press theme, export all slides as PNGs. Free & client-side." />
+<meta property="og:image" content="https://carouselforge.app/og.png" />
+<meta property="og:url" content="https://carouselforge.app/" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="CarouselForge — Editorial carousels, forged in your browser" />
+<meta name="twitter:description" content="Paste points → beautiful multi-slide carousel → export all slides as PNG. Free, no signup." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is CarouselForge free?",
+      "acceptedText": "yes",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. The full carousel designer runs 100% in your browser — paste your points, pick a press theme, and export every slide as a high-resolution PNG. No signup, no server, no watermark. The optional Pro mode lets you bring your own GLM (z.ai) API key so the AI can draft the slide copy and hooks for you."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Where does my content go?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Nowhere. Everything is rendered locally with HTML canvas. Your text never leaves your device unless you opt into Pro mode, in which case your prompt is sent directly from your browser to the official z.ai API using your own key."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What sizes does it export?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Square 1080×1080 (Instagram / LinkedIn) and Portrait 1080×1350 (Instagram). Slides are rendered at full native resolution and bundled into a single .zip, or downloaded one at a time."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need an API key?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Writing your own copy is free forever. A key is only needed if you want the AI to write the slides for you. You bring your own GLM key — it is stored only in this page and used directly against the official API."
+      }
+    }
+  ]
+}
+</script>
+
+<style>
+  :root{
+    /* Default press theme — overridden live by JS */
+    --ink:#1b1f6b;
+    --accent:#ff5d3b;
+    --paper:#f3efe6;
+    --paper-2:#ece6d8;
+    --ink-soft: color-mix(in srgb, var(--ink) 62%, var(--paper));
+    --hair: color-mix(in srgb, var(--ink) 18%, var(--paper));
+    --shadow: color-mix(in srgb, var(--ink) 30%, transparent);
+    --maxw: 1000px;
+    --ease: cubic-bezier(.16,.84,.3,1);
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Inter",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    line-height:1.5;
+  }
+
+  /* ---------- print-shop background layers ---------- */
+  .bg{position:fixed;inset:0;z-index:-2;background:var(--paper)}
+  .bg::before{ /* halftone dot field */
+    content:"";position:absolute;inset:-20%;
+    background-image:radial-gradient(color-mix(in srgb,var(--ink) 9%,transparent) 1.4px, transparent 1.5px);
+    background-size:22px 22px;
+    transform:rotate(8deg);
+    opacity:.55;
+    animation:drift 40s linear infinite;
+  }
+  .bg::after{ /* warm vignette glow */
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(70% 50% at 80% -5%, color-mix(in srgb,var(--accent) 22%,transparent), transparent 60%),
+      radial-gradient(60% 60% at -10% 110%, color-mix(in srgb,var(--ink) 16%,transparent), transparent 55%);
+  }
+  @keyframes drift{to{background-position:220px 0}}
+  .grain{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.05;mix-blend-mode:multiply}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important; transition:none !important}
+    html{scroll-behavior:auto}
+  }
+
+  a{color:inherit}
+  ::selection{background:var(--accent);color:var(--paper)}
+
+  /* ---------- shared shell ---------- */
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+  .mono{font-family:"Space Mono",monospace;letter-spacing:.04em}
+  .kicker{font-family:"Space Mono",monospace;text-transform:uppercase;letter-spacing:.22em;font-size:.7rem;color:var(--accent);font-weight:700}
+
+  .display{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;line-height:.96;letter-spacing:-.02em}
+
+  /* ---------- top bar ---------- */
+  header.nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(8px);
+    background:color-mix(in srgb,var(--paper) 78%,transparent);
+    border-bottom:1px solid var(--hair)}
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .brand{display:flex;align-items:center;gap:11px;font-family:"Bricolage Grotesque";font-weight:800;font-size:1.18rem;letter-spacing:-.02em}
+  .brand .mk{width:30px;height:30px;border-radius:7px;background:var(--ink);position:relative;flex:0 0 auto;overflow:hidden;box-shadow:0 4px 14px var(--shadow)}
+  .brand .mk::before{content:"";position:absolute;inset:6px;border:2px solid var(--paper);border-radius:3px}
+  .brand .mk::after{content:"";position:absolute;left:11px;top:5px;width:2px;height:20px;background:var(--accent)}
+  .brand small{font-family:"Space Mono",monospace;font-size:.58rem;letter-spacing:.18em;color:var(--accent);text-transform:uppercase;font-weight:700;align-self:flex-start;margin-top:2px}
+  .nav-cta{display:flex;gap:8px;align-items:center}
+  .nav-cta a{font-family:"Space Mono",monospace;font-size:.72rem;text-decoration:none;text-transform:uppercase;letter-spacing:.1em}
+  .pill{padding:9px 15px;border-radius:999px;border:1.5px solid var(--ink);font-weight:700}
+  .pill.solid{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .pill:hover{background:var(--accent);border-color:var(--accent);color:var(--paper);transform:translateY(-1px)}
+  .pill{transition:all .2s var(--ease)}
+  @media(max-width:640px){.nav-cta a.ghostlink{display:none}}
+
+  /* ---------- HERO ---------- */
+  .hero{position:relative;padding:54px 0 30px}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:30px;align-items:center}
+  @media(max-width:860px){.hero-grid{grid-template-columns:1fr;gap:38px}}
+
+  .hero h1{font-size:clamp(2.7rem,7.2vw,5.1rem);margin:.2em 0 .35em}
+  .hero h1 .em{position:relative;white-space:nowrap}
+  .hero h1 .em::after{content:"";position:absolute;left:-2px;right:-2px;bottom:.08em;height:.34em;background:var(--accent);z-index:-1;transform:skewX(-9deg);opacity:.92}
+  .hero p.lede{font-size:1.12rem;max-width:30ch;color:var(--ink-soft);margin:0 0 26px}
+  .hero-cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .btn{cursor:pointer;font-family:"Space Mono",monospace;text-transform:uppercase;letter-spacing:.08em;font-weight:700;font-size:.82rem;
+    padding:14px 22px;border-radius:11px;border:1.5px solid var(--ink);background:var(--ink);color:var(--paper);
+    transition:all .2s var(--ease);text-decoration:none;display:inline-flex;align-items:center;gap:9px}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 10px 26px var(--shadow)}
+  .btn.ghost{background:transparent;color:var(--ink)}
+  .btn.ghost:hover{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+  .hero .meta{margin-top:20px;display:flex;gap:18px;flex-wrap:wrap;font-family:"Space Mono",monospace;font-size:.7rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.1em}
+  .hero .meta b{color:var(--ink)}
+
+  /* ---- animated flipping deck ---- */
+  .deckstage{position:relative;height:430px;perspective:1600px;display:flex;align-items:center;justify-content:center}
+  .deckstage .regmark{position:absolute;width:26px;height:26px;border:2px solid var(--ink);opacity:.5}
+  .deckstage .regmark.tl{top:-6px;left:8%;border-right:0;border-bottom:0}
+  .deckstage .regmark.br{bottom:-6px;right:8%;border-left:0;border-top:0}
+  .deck{position:relative;width:300px;height:375px;transform-style:preserve-3d}
+  .card{position:absolute;inset:0;border-radius:14px;overflow:hidden;
+    box-shadow:0 30px 60px var(--shadow),0 2px 0 color-mix(in srgb,var(--ink) 12%,transparent);
+    transform-origin:center;backface-visibility:hidden;
+    transition:transform 1.05s var(--ease),opacity .9s var(--ease)}
+  /* mini editorial slide rendered in CSS */
+  .slide{width:100%;height:100%;background:var(--paper);color:var(--ink);padding:26px 24px;
+    display:flex;flex-direction:column;position:relative;overflow:hidden}
+  .slide.invert{background:var(--ink);color:var(--paper)}
+  .slide .dotfield{position:absolute;right:-30px;top:-30px;width:150px;height:150px;
+    background-image:radial-gradient(var(--accent) 2px,transparent 2.5px);background-size:13px 13px;opacity:.6}
+  .slide .stop{font-family:"Space Mono",monospace;font-size:.55rem;letter-spacing:.18em;text-transform:uppercase;
+    display:flex;justify-content:space-between;border-bottom:1.5px solid currentColor;padding-bottom:8px;opacity:.85}
+  .slide .stop .pg{color:var(--accent)}
+  .slide .big{font-family:"Bricolage Grotesque";font-weight:800;line-height:.95;letter-spacing:-.02em;margin-top:auto}
+  .slide .num{font-family:"Bricolage Grotesque";font-weight:800;font-size:3.4rem;color:var(--accent);line-height:.8}
+  .slide .sub{font-size:.72rem;line-height:1.4;margin-top:10px;opacity:.8;max-width:24ch}
+  .slide .foot{margin-top:auto;font-family:"Space Mono",monospace;font-size:.58rem;letter-spacing:.1em;display:flex;justify-content:space-between;align-items:center}
+  .slide .bar{width:54px;height:5px;background:var(--accent);border-radius:3px;margin:14px 0}
+  .slide .swipe{color:var(--accent);font-weight:700}
+
+  .deck-dots{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:7px}
+  .deck-dots i{width:7px;height:7px;border-radius:50%;background:var(--hair);transition:.3s}
+  .deck-dots i.on{background:var(--accent);width:20px;border-radius:4px}
+
+  /* ---------- section heading ---------- */
+  .sec{padding:46px 0}
+  .sec-h{display:flex;align-items:baseline;gap:14px;margin-bottom:26px;flex-wrap:wrap}
+  .sec-h h2{font-family:"Bricolage Grotesque";font-weight:800;font-size:clamp(1.7rem,4vw,2.5rem);margin:0;letter-spacing:-.02em}
+  .sec-h .idx{font-family:"Space Mono",monospace;color:var(--accent);font-weight:700;font-size:.85rem}
+
+  /* ---------- THE FORGE (app) ---------- */
+  .forge{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:26px;align-items:start}
+  @media(max-width:900px){.forge{grid-template-columns:1fr}}
+  .panel{background:color-mix(in srgb,var(--paper) 60%,#fff 40%);border:1.5px solid var(--hair);border-radius:18px;padding:22px;
+    box-shadow:0 18px 50px -28px var(--shadow)}
+  .panel h3{font-family:"Bricolage Grotesque";font-weight:700;margin:0 0 4px;font-size:1.15rem;letter-spacing:-.01em}
+  .panel .hint{font-size:.8rem;color:var(--ink-soft);margin:0 0 16px}
+
+  label.fld{display:block;margin:0 0 14px}
+  label.fld > span{display:block;font-family:"Space Mono",monospace;text-transform:uppercase;letter-spacing:.12em;font-size:.62rem;color:var(--ink-soft);margin-bottom:6px;font-weight:700}
+  .input,textarea.input{width:100%;font-family:"Inter";font-size:.92rem;color:var(--ink);
+    background:var(--paper);border:1.5px solid var(--hair);border-radius:11px;padding:11px 13px;transition:.18s}
+  textarea.input{resize:vertical;min-height:130px;line-height:1.55;font-size:.88rem}
+  .input:focus,textarea.input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 24%,transparent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  /* segmented toggles */
+  .seg{display:flex;gap:6px;background:var(--paper);border:1.5px solid var(--hair);padding:5px;border-radius:12px}
+  .seg button{flex:1;cursor:pointer;font-family:"Space Mono",monospace;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;
+    border:0;background:transparent;color:var(--ink-soft);padding:8px 6px;border-radius:8px;transition:.18s;font-weight:700}
+  .seg button.on{background:var(--ink);color:var(--paper)}
+
+  /* theme swatches */
+  .themes{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+  .sw{cursor:pointer;border:2px solid var(--hair);border-radius:11px;padding:8px;display:flex;flex-direction:column;gap:6px;transition:.18s;background:var(--paper)}
+  .sw:hover{transform:translateY(-2px)}
+  .sw.on{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink)}
+  .sw .chips{display:flex;gap:4px;height:26px}
+  .sw .chips i{flex:1;border-radius:5px;display:block}
+  .sw small{font-family:"Space Mono",monospace;font-size:.54rem;letter-spacing:.04em;color:var(--ink-soft);text-transform:uppercase;text-align:center}
+
+  /* ---------- preview / deck ---------- */
+  .stage{display:flex;flex-direction:column;gap:14px}
+  .stage-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .stage-top .count{font-family:"Space Mono",monospace;font-size:.72rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.1em}
+  .navbtns{display:flex;gap:8px}
+  .iconbtn{width:38px;height:38px;border-radius:10px;border:1.5px solid var(--ink);background:var(--paper);cursor:pointer;
+    font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:.18s;color:var(--ink)}
+  .iconbtn:hover{background:var(--ink);color:var(--paper)}
+  .iconbtn:disabled{opacity:.3;cursor:not-allowed}
+
+  .canvas-frame{position:relative;border-radius:14px;overflow:hidden;background:var(--paper-2);
+    box-shadow:0 24px 60px -24px var(--shadow);border:1px solid var(--hair);align-self:center;max-width:100%}
+  #bigCanvas{display:block;width:100%;height:auto}
+
+  .thumbs{display:flex;gap:9px;overflow-x:auto;padding:6px 2px 10px;scrollbar-width:thin}
+  .thumb{flex:0 0 auto;border-radius:8px;overflow:hidden;border:2px solid transparent;cursor:pointer;position:relative;transition:.15s;background:var(--paper-2)}
+  .thumb canvas{display:block;width:62px;height:auto}
+  .thumb.on{border-color:var(--accent)}
+  .thumb .tn{position:absolute;top:2px;left:3px;font-family:"Space Mono",monospace;font-size:.5rem;color:var(--accent)}
+
+  .export-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+  .export-row .btn{flex:1;justify-content:center;min-width:140px;font-size:.74rem;padding:13px 14px}
+
+  /* ---------- PRO panel ---------- */
+  .pro{margin-top:26px;border:1.5px solid var(--ink);border-radius:18px;overflow:hidden;background:var(--ink);color:var(--paper)}
+  .pro-head{display:flex;align-items:center;gap:12px;padding:18px 22px;cursor:pointer;user-select:none}
+  .pro-head .tag{font-family:"Space Mono",monospace;font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;
+    background:var(--accent);color:var(--paper);padding:4px 9px;border-radius:6px;font-weight:700}
+  .pro-head h3{font-family:"Bricolage Grotesque";margin:0;font-size:1.2rem;font-weight:800;color:var(--paper)}
+  .pro-head .chev{margin-left:auto;font-size:1.1rem;transition:.25s}
+  .pro.open .chev{transform:rotate(180deg)}
+  .pro-body{display:none;padding:0 22px 24px}
+  .pro.open .pro-body{display:block;animation:fade .35s var(--ease)}
+  @keyframes fade{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+  .pro-body p{font-size:.86rem;color:color-mix(in srgb,var(--paper) 80%,var(--ink));margin:0 0 16px}
+  .pro-body label.fld > span{color:color-mix(in srgb,var(--paper) 70%,var(--ink))}
+  .pro-body .input,.pro-body textarea.input{background:color-mix(in srgb,var(--ink) 70%,#000);border-color:color-mix(in srgb,var(--paper) 22%,transparent);color:var(--paper)}
+  .pro-body .input::placeholder{color:color-mix(in srgb,var(--paper) 45%,transparent)}
+  .pro .btn{background:var(--accent);border-color:var(--accent);color:var(--paper);width:100%;justify-content:center}
+  .pro .btn:hover{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+  .pro .aff{font-size:.72rem;margin-top:12px;color:color-mix(in srgb,var(--paper) 65%,var(--ink));text-align:center}
+  .pro .aff a{color:var(--accent);font-weight:700}
+  .status{font-family:"Space Mono",monospace;font-size:.74rem;margin-top:12px;min-height:1.2em;text-align:center}
+  .status.err{color:var(--accent)}
+  .status.ok{color:#7ee3a6}
+
+  /* features strip */
+  .feats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:760px){.feats{grid-template-columns:1fr}}
+  .feat{padding:20px;border:1.5px solid var(--hair);border-radius:16px;background:color-mix(in srgb,var(--paper) 55%,#fff 45%);transition:.2s}
+  .feat:hover{transform:translateY(-3px);border-color:var(--accent)}
+  .feat .n{font-family:"Space Mono",monospace;color:var(--accent);font-weight:700;font-size:.8rem}
+  .feat h4{font-family:"Bricolage Grotesque";font-weight:700;margin:8px 0 6px;font-size:1.1rem}
+  .feat p{margin:0;font-size:.86rem;color:var(--ink-soft)}
+
+  /* FAQ */
+  .faq details{border-bottom:1.5px solid var(--hair);padding:16px 0}
+  .faq summary{cursor:pointer;font-family:"Bricolage Grotesque";font-weight:700;font-size:1.05rem;list-style:none;display:flex;justify-content:space-between;gap:12px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:"+";color:var(--accent);font-weight:700;transition:.2s}
+  .faq details[open] summary::after{transform:rotate(45deg)}
+  .faq p{margin:12px 0 0;color:var(--ink-soft);font-size:.92rem;max-width:62ch}
+
+  footer{border-top:1.5px solid var(--hair);margin-top:46px;padding:30px 0 50px}
+  footer .ft{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;align-items:center;font-family:"Space Mono",monospace;font-size:.72rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em}
+  footer a{color:var(--accent);text-decoration:none}
+
+  .reveal{opacity:0;transform:translateY(22px)}
+  .reveal.in{opacity:1;transform:none;transition:opacity .7s var(--ease),transform .7s var(--ease)}
+
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<svg class="grain"><filter id="gr"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3"/></filter><rect width="100%" height="100%" filter="url(#gr)"/></svg>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <div class="brand">
+      <span class="mk"></span>
+      <span>CarouselForge<br><small>Editorial deck press</small></span>
+    </div>
+    <nav class="nav-cta">
+      <a class="ghostlink pill" href="#forge">Open the forge</a>
+      <a class="pill solid" href="#pro">Pro · AI copy</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="kicker">Carousels for LinkedIn · Instagram</span>
+      <h1 class="display">Forge a <span class="em">scroll-stopping</span> carousel in minutes.</h1>
+      <p class="lede">Paste your topic or talking points. CarouselForge sets them in a magazine-grade type system and exports every slide as a crisp PNG.</p>
+      <div class="hero-cta">
+        <a class="btn" href="#forge">Start designing →</a>
+        <a class="btn ghost" href="#how">See how it works</a>
+      </div>
+      <div class="meta">
+        <span><b>100%</b> in-browser</span>
+        <span><b>0</b> signup</span>
+        <span><b>PNG</b> + .zip export</span>
+      </div>
+    </div>
+
+    <div class="deckstage" aria-hidden="true">
+      <span class="regmark tl"></span>
+      <span class="regmark br"></span>
+      <div class="deck" id="heroDeck"></div>
+      <div class="deck-dots" id="heroDots"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section class="sec wrap" id="how">
+  <div class="sec-h"><span class="idx">01 / WHY</span><h2 class="display">Not a template. A type system.</h2></div>
+  <div class="feats">
+    <div class="feat reveal"><div class="n">A</div><h4>Editorial by default</h4><p>Registration marks, halftone fields, a real display/serif/mono hierarchy. Every deck looks art-directed, not auto-generated.</p></div>
+    <div class="feat reveal"><div class="n">B</div><h4>One consistent deck</h4><p>Cover, numbered points, and a punchy CTA — all locked to one two-color press theme so the carousel reads as a single object.</p></div>
+    <div class="feat reveal"><div class="n">C</div><h4>Export everything</h4><p>Full-resolution 1080px PNGs, square or portrait, bundled into one .zip or downloaded slide-by-slide. No watermark, ever.</p></div>
+  </div>
+</section>
+
+<!-- ============ THE FORGE ============ -->
+<section class="sec wrap" id="forge">
+  <div class="sec-h"><span class="idx">02 / THE FORGE</span><h2 class="display">Write it. Forge it. Ship it.</h2></div>
+
+  <div class="forge">
+    <!-- LEFT: inputs -->
+    <div>
+      <div class="panel">
+        <h3>Content</h3>
+        <p class="hint">Each point becomes its own numbered slide. Separate points with a blank line. First line = headline, the rest = supporting copy.</p>
+
+        <label class="fld"><span>Handle / byline</span>
+          <input class="input" id="fHandle" value="@yourhandle" maxlength="40" />
+        </label>
+
+        <label class="fld"><span>Cover hook</span>
+          <input class="input" id="fHook" value="5 carousel mistakes quietly killing your reach" maxlength="120" />
+        </label>
+
+        <label class="fld"><span>Cover subline</span>
+          <input class="input" id="fSub" value="And the editorial fix for each — save this before your next post." maxlength="160" />
+        </label>
+
+        <label class="fld"><span>Slides — one point per block</span>
+          <textarea class="input" id="fPoints">Slide 1 does all the work
+If the first frame isn't a promise, nobody swipes. Lead with the payoff, not a warm-up.
+
+Walls of text don't get read
+One idea per slide. If you need two sentences to say it, it's two slides.
+
+Design the swipe, not the slide
+Use a cliffhanger on every frame so the thumb keeps moving to the next one.
+
+Numbers beat adjectives
+"3x more saves" lands. "Really effective" evaporates. Put the proof on the slide.
+
+End with one clear ask
+Tell them exactly what to do next — follow, save, or comment one word.</textarea>
+        </label>
+
+        <div class="row">
+          <label class="fld"><span>CTA headline</span>
+            <input class="input" id="fCtaH" value="Steal this carousel system" maxlength="80" />
+          </label>
+          <label class="fld"><span>CTA subline</span>
+            <input class="input" id="fCtaS" value="Follow for one craft breakdown a week." maxlength="100" />
+          </label>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px">
+        <h3>Press theme</h3>
+        <p class="hint">Two inks on stock. Pick the palette; the whole deck and this page retune to it.</p>
+        <div class="themes" id="themes"></div>
+
+        <div style="margin-top:16px" class="row">
+          <label class="fld"><span>Format</span>
+            <div class="seg" id="fmtSeg">
+              <button data-fmt="portrait" class="on">Portrait 4:5</button>
+              <button data-fmt="square">Square 1:1</button>
+            </div>
+          </label>
+          <label class="fld"><span>Page marks</span>
+            <div class="seg" id="markSeg">
+              <button data-mark="on" class="on">On</button>
+              <button data-mark="off">Off</button>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- PRO -->
+      <div class="pro" id="pro">
+        <div class="pro-head" id="proHead">
+          <span class="tag">Pro</span>
+          <h3>Let AI write the copy</h3>
+          <span class="chev">▾</span>
+        </div>
+        <div class="pro-body">
+          <p>Free mode is yours forever — type your own copy above. Pro mode brings your own GLM key so the AI drafts sharp hooks and slide copy from a single topic. Your key stays in this browser and goes straight to z.ai.</p>
+
+          <label class="fld"><span>Your GLM API key (z.ai)</span>
+            <input class="input" id="glmKey" type="password" placeholder="paste your key — stored only here" />
+          </label>
+          <label class="fld"><span>Topic / raw idea</span>
+            <input class="input" id="glmTopic" placeholder="e.g. how to price freelance design without underselling" />
+          </label>
+          <div class="row">
+            <label class="fld"><span>Audience</span>
+              <input class="input" id="glmAud" placeholder="e.g. early freelance designers" />
+            </label>
+            <label class="fld"><span>Tone</span>
+              <input class="input" id="glmTone" placeholder="e.g. blunt, encouraging" />
+            </label>
+          </div>
+          <button class="btn" id="glmGo">✦ Write my carousel</button>
+          <div class="status" id="glmStatus"></div>
+          <p class="aff">No key yet? <a href="https://z.ai/subscribe?ic=BWTG6TRYYQ" target="_blank" rel="noopener">Get a GLM key — 5% off</a> · referral link, supports CarouselForge.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: preview + export -->
+    <div class="panel">
+      <div class="stage">
+        <div class="stage-top">
+          <span class="count" id="count">Slide 01 / 07</span>
+          <div class="navbtns">
+            <button class="iconbtn" id="prev" aria-label="Previous slide">‹</button>
+            <button class="iconbtn" id="next" aria-label="Next slide">›</button>
+          </div>
+        </div>
+
+        <div class="canvas-frame" id="frame">
+          <canvas id="bigCanvas" width="1080" height="1350"></canvas>
+        </div>
+
+        <div class="thumbs" id="thumbs"></div>
+
+        <div class="export-row">
+          <button class="btn" id="dlAll">⤓ Download all (.zip)</button>
+          <button class="btn ghost" id="dlOne">⤓ This slide (.png)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="sec wrap">
+  <div class="sec-h"><span class="idx">03 / FAQ</span><h2 class="display">The fine print, briefly.</h2></div>
+  <div class="faq">
+    <details open><summary>Is it really free?</summary><p>Yes. The entire designer runs in your browser — paste points, pick a theme, export every slide as a high-res PNG, no signup and no watermark. Pro mode is optional and only kicks in if you bring your own GLM key for AI-written copy.</p></details>
+    <details><summary>Where does my content go?</summary><p>Nowhere. Slides are drawn locally with HTML canvas; your text never leaves the device. The only network call happens if you opt into Pro mode, in which case your prompt goes directly from your browser to the official z.ai API using your own key.</p></details>
+    <details><summary>What can I export?</summary><p>Square 1080×1080 or Portrait 1080×1350, rendered at full native resolution. Grab the whole deck as a single .zip, or download slides one at a time.</p></details>
+    <details><summary>Do I need an API key?</summary><p>No. Writing your own copy is free forever. A key is only needed if you want the AI to draft the slides for you, and you bring your own — it is stored only in this page.</p></details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap ft">
+    <span>CarouselForge · forged client-side</span>
+    <span>Affiliate: <a href="https://z.ai/subscribe?ic=BWTG6TRYYQ" target="_blank" rel="noopener">GLM key</a> referral · no tracking</span>
+  </div>
+</footer>
+
+<script>
+"use strict";
+/* ============================================================
+   CarouselForge — client-side editorial carousel press
+   ============================================================ */
+
+const THEMES = [
+  {id:"cobalt", name:"Riso Cobalt", ink:"#1b1f6b", accent:"#ff5d3b", paper:"#f3efe6"},
+  {id:"press",  name:"Press Gold",  ink:"#15130d", accent:"#ffc23d", paper:"#faf6ec"},
+  {id:"rose",   name:"Ink & Rose",  ink:"#2a1e3f", accent:"#ff5a8a", paper:"#f6f0ef"},
+  {id:"forest", name:"Field Press",  ink:"#13261d", accent:"#ff6a3d", paper:"#eef0e6"},
+  {id:"teal",   name:"Cyan Stock",  ink:"#063b45", accent:"#ff4d4d", paper:"#eef4f2"},
+  {id:"plum",   name:"Plum Riso",   ink:"#3a1430", accent:"#19c39c", paper:"#f5eef1"},
+  {id:"navy",   name:"Night Edit",  ink:"#0e1230", accent:"#f5d020", paper:"#eef0f6"},
+  {id:"clay",   name:"Burnt Clay",  ink:"#3a1c10", accent:"#e8633a", paper:"#f4ece3"},
+];
+
+const state = {
+  theme: THEMES[0],
+  format: "portrait",   // portrait | square
+  marks: true,
+  current: 0,
+  slides: [],
+  fontsReady: false,
+};
+
+const FMT = { portrait:{w:1080,h:1350}, square:{w:1080,h:1080} };
+
+/* ---------- DOM ---------- */
+const $ = s => document.querySelector(s);
+const big = $("#bigCanvas");
+const bctx = big.getContext("2d");
+
+/* ============================================================
+   FONT LOADING (canvas needs explicit load)
+   ============================================================ */
+async function ensureFonts(){
+  if(state.fontsReady) return;
+  try{
+    await Promise.all([
+      document.fonts.load('800 100px "Bricolage Grotesque"'),
+      document.fonts.load('700 100px "Bricolage Grotesque"'),
+      document.fonts.load('400 40px "Inter"'),
+      document.fonts.load('500 40px "Inter"'),
+      document.fonts.load('700 40px "Space Mono"'),
+      document.fonts.load('400 40px "Space Mono"'),
+    ]);
+    await document.fonts.ready;
+  }catch(e){/* fall back to system */}
+  state.fontsReady = true;
+}
+
+/* ============================================================
+   PARSE INPUTS -> SLIDE MODEL
+   ============================================================ */
+function buildSlides(){
+  const handle = $("#fHandle").value.trim() || "@yourhandle";
+  const hook   = $("#fHook").value.trim() || "Your big idea";
+  const sub    = $("#fSub").value.trim();
+  const ctaH   = $("#fCtaH").value.trim() || "Follow for more";
+  const ctaS   = $("#fCtaS").value.trim();
+  const raw    = $("#fPoints").value;
+
+  const blocks = raw.split(/\n\s*\n/).map(b=>b.trim()).filter(Boolean);
+  const points = blocks.map(b=>{
+    const lines = b.split(/\n/).map(l=>l.trim()).filter(Boolean);
+    return { title: lines[0]||"", body: lines.slice(1).join(" ") };
+  });
+
+  const slides = [];
+  slides.push({kind:"cover", handle, eyebrow:"Carousel", title:hook, body:sub});
+  points.forEach((p,i)=> slides.push({kind:"point", handle, n:i+1, title:p.title, body:p.body}));
+  slides.push({kind:"cta", handle, title:ctaH, body:ctaS});
+
+  state.slides = slides;
+  if(state.current >= slides.length) state.current = slides.length-1;
+}
+
+/* ============================================================
+   CANVAS TEXT HELPERS
+   ============================================================ */
+function wrapLines(ctx, text, maxW){
+  const words = (text||"").split(/\s+/).filter(Boolean);
+  const lines=[]; let line="";
+  for(const w of words){
+    const test = line ? line+" "+w : w;
+    if(ctx.measureText(test).width > maxW && line){ lines.push(line); line=w; }
+    else line=test;
+  }
+  if(line) lines.push(line);
+  return lines;
+}
+// auto-fit a headline within a box
+function fitHead(ctx, text, maxW, maxH, family, weight, max, min, lh){
+  let size=max;
+  while(size>min){
+    ctx.font = `${weight} ${size}px ${family}`;
+    const lines = wrapLines(ctx, text, maxW);
+    if(lines.length*size*lh <= maxH) return {size, lines, lh};
+    size -= 2;
+  }
+  ctx.font = `${weight} ${size}px ${family}`;
+  return {size, lines:wrapLines(ctx,text,maxW), lh};
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+/* ============================================================
+   SLIDE RENDERER (the press)
+   ============================================================ */
+function drawSlide(ctx, W, H, slide, idx, total){
+  const T = state.theme;
+  const invert = slide.kind === "cta";
+  const bgFill   = invert ? T.ink   : T.paper;
+  const fg       = invert ? T.paper : T.ink;
+  const fgSoft   = mix(fg, bgFill, 0.55);
+  const M = Math.round(W*0.085);     // margin
+  const cw = W - M*2;                 // content width
+
+  // ---- background
+  ctx.fillStyle = bgFill; ctx.fillRect(0,0,W,H);
+
+  // subtle paper texture (sparse speckle) — deterministic per slide
+  ctx.save();
+  let seed = (idx+1)*97;
+  const rnd = ()=> (seed = (seed*1103515245+12345)&0x7fffffff)/0x7fffffff;
+  ctx.fillStyle = mix(fg, bgFill, 0.92);
+  for(let i=0;i<140;i++){ ctx.fillRect(rnd()*W, rnd()*H, 1.4, 1.4); }
+  ctx.restore();
+
+  // ---- halftone dot field (corner motif)
+  ctx.save();
+  ctx.fillStyle = T.accent; ctx.globalAlpha = 0.85;
+  const dot = W*0.013, gap = W*0.028;
+  const fieldX = invert ? M : W - M - gap*5.2;
+  const fieldY = invert ? H - M - gap*5.2 : M*0.5;
+  for(let r=0;r<6;r++) for(let c=0;c<6;c++){
+    const rr = dot*(1 - (r+c)/16);
+    if(rr<=0) continue;
+    ctx.beginPath();
+    ctx.arc(fieldX + c*gap, fieldY + r*gap, rr, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // ---- crop / registration marks
+  if(state.marks){
+    ctx.strokeStyle = fg; ctx.lineWidth = Math.max(2,W*0.0028); ctx.globalAlpha=.7;
+    const m = M*0.42, len = W*0.035;
+    const corners=[[m,m,1,1],[W-m,m,-1,1],[m,H-m,1,-1],[W-m,H-m,-1,-1]];
+    corners.forEach(([x,y,sx,sy])=>{
+      ctx.beginPath();
+      ctx.moveTo(x, y); ctx.lineTo(x+len*sx, y);
+      ctx.moveTo(x, y); ctx.lineTo(x, y+len*sy);
+      ctx.stroke();
+    });
+    ctx.globalAlpha=1;
+  }
+
+  // ---- top stop bar: kicker + page index
+  const topY = M*1.05;
+  ctx.fillStyle = fgSoft;
+  ctx.font = `700 ${W*0.022}px "Space Mono", monospace`;
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+  ctx.fillText(slide.handle.toUpperCase(), M, topY);
+  ctx.textAlign = "right";
+  ctx.fillStyle = T.accent;
+  const pg = String(idx+1).padStart(2,"0")+" / "+String(total).padStart(2,"0");
+  ctx.fillText(pg, W-M, topY);
+  ctx.textAlign = "left";
+  // rule
+  ctx.strokeStyle = mix(fg,bgFill,0.7); ctx.lineWidth = Math.max(1.5,W*0.002);
+  ctx.beginPath(); ctx.moveTo(M, topY+W*0.018); ctx.lineTo(W-M, topY+W*0.018); ctx.stroke();
+
+  const bodyTop = topY + W*0.06;
+  const footY = H - M*1.1;
+
+  // ============ COVER ============
+  if(slide.kind === "cover"){
+    ctx.fillStyle = T.accent;
+    ctx.font = `700 ${W*0.026}px "Space Mono", monospace`;
+    ctx.fillText(slide.eyebrow.toUpperCase()+" · SAVE THIS", M, bodyTop);
+
+    const hb = fitHead(ctx, slide.title, cw, H*0.46, '"Bricolage Grotesque"', 800, W*0.115, W*0.05, 1.0);
+    let y = bodyTop + W*0.075 + hb.size;
+    ctx.fillStyle = fg;
+    ctx.font = `800 ${hb.size}px "Bricolage Grotesque"`;
+    hb.lines.forEach(l=>{ ctx.fillText(l, M, y); y += hb.size*hb.lh; });
+
+    // accent underbar
+    ctx.fillStyle = T.accent;
+    roundRect(ctx, M, y - hb.size*0.55, W*0.18, W*0.018, W*0.009); ctx.fill();
+
+    if(slide.body){
+      y += W*0.04;
+      ctx.fillStyle = fgSoft;
+      ctx.font = `400 ${W*0.034}px "Inter", sans-serif`;
+      const sl = wrapLines(ctx, slide.body, cw*0.92);
+      sl.slice(0,4).forEach(l=>{ y += W*0.05; ctx.fillText(l, M, y); });
+    }
+
+    // footer swipe prompt
+    ctx.fillStyle = fgSoft; ctx.font = `700 ${W*0.024}px "Space Mono", monospace`;
+    ctx.fillText(slide.handle.toUpperCase(), M, footY);
+    ctx.textAlign="right"; ctx.fillStyle=T.accent;
+    ctx.fillText("SWIPE →", W-M, footY); ctx.textAlign="left";
+  }
+
+  // ============ POINT ============
+  else if(slide.kind === "point"){
+    // big index
+    ctx.fillStyle = T.accent;
+    ctx.font = `800 ${W*0.2}px "Bricolage Grotesque"`;
+    const numStr = String(slide.n).padStart(2,"0");
+    ctx.fillText(numStr, M-W*0.01, bodyTop + W*0.16);
+
+    // short accent rule under the index
+    ctx.fillStyle = T.accent;
+    roundRect(ctx, M, bodyTop + W*0.205, W*0.13, W*0.016, W*0.008); ctx.fill();
+
+    let y = bodyTop + W*0.30;
+    const tb = fitHead(ctx, slide.title, cw, H*0.24, '"Bricolage Grotesque"', 700, W*0.072, W*0.04, 1.02);
+    ctx.fillStyle = fg; ctx.font = `700 ${tb.size}px "Bricolage Grotesque"`;
+    tb.lines.forEach(l=>{ y += tb.size; ctx.fillText(l, M, y); y += tb.size*(tb.lh-1); });
+
+    if(slide.body){
+      y += W*0.045;
+      ctx.fillStyle = fgSoft;
+      ctx.font = `400 ${W*0.036}px "Inter", sans-serif`;
+      const sl = wrapLines(ctx, slide.body, cw*0.94);
+      sl.slice(0,7).forEach(l=>{ y += W*0.052; ctx.fillText(l, M, y); });
+    }
+
+    // footer
+    ctx.fillStyle = fgSoft; ctx.font = `700 ${W*0.022}px "Space Mono", monospace`;
+    ctx.fillText(slide.handle.toUpperCase(), M, footY);
+    ctx.textAlign="right"; ctx.fillStyle=T.accent;
+    ctx.fillText("KEEP SWIPING →", W-M, footY); ctx.textAlign="left";
+  }
+
+  // ============ CTA ============
+  else {
+    ctx.fillStyle = T.accent;
+    ctx.font = `700 ${W*0.026}px "Space Mono", monospace`;
+    ctx.fillText("THE ASK", M, bodyTop);
+
+    const hb = fitHead(ctx, slide.title, cw, H*0.4, '"Bricolage Grotesque"', 800, W*0.105, W*0.05, 1.0);
+    let y = bodyTop + W*0.09 + hb.size;
+    ctx.fillStyle = fg; ctx.font = `800 ${hb.size}px "Bricolage Grotesque"`;
+    hb.lines.forEach(l=>{ ctx.fillText(l, M, y); y += hb.size*hb.lh; });
+
+    ctx.fillStyle = T.accent;
+    roundRect(ctx, M, y - hb.size*0.5, W*0.22, W*0.018, W*0.009); ctx.fill();
+
+    if(slide.body){
+      y += W*0.04;
+      ctx.fillStyle = fgSoft; ctx.font = `400 ${W*0.036}px "Inter", sans-serif`;
+      wrapLines(ctx, slide.body, cw*0.9).slice(0,3).forEach(l=>{ y += W*0.054; ctx.fillText(l,M,y); });
+    }
+
+    // big follow chip
+    const chipY = footY - W*0.13;
+    ctx.font = `700 ${W*0.04}px "Bricolage Grotesque"`;
+    const label = "Follow "+slide.handle;
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = T.accent;
+    roundRect(ctx, M, chipY, tw + W*0.08, W*0.085, W*0.04); ctx.fill();
+    ctx.fillStyle = T.ink === bgFill ? T.paper : T.ink; // contrast on accent
+    ctx.fillStyle = T.paper;
+    ctx.fillText(label, M + W*0.04, chipY + W*0.058);
+
+    ctx.fillStyle = fgSoft; ctx.font = `700 ${W*0.022}px "Space Mono", monospace`;
+    ctx.fillText("CAROUSELFORGE", M, footY);
+    ctx.textAlign="right"; ctx.fillStyle=T.accent;
+    ctx.fillText("↩ SHARE", W-M, footY); ctx.textAlign="left";
+  }
+}
+
+/* color mix helper (returns rgb string) */
+function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function mix(a,b,t){const A=hexToRgb(a),B=hexToRgb(b);return `rgb(${Math.round(A[0]+(B[0]-A[0])*t)},${Math.round(A[1]+(B[1]-A[1])*t)},${Math.round(A[2]+(B[2]-A[2])*t)})`;}
+
+/* ============================================================
+   RENDER PIPELINE
+   ============================================================ */
+async function renderAll(){
+  await ensureFonts();
+  buildSlides();
+  const {w,h} = FMT[state.format];
+  big.width=w; big.height=h;
+  drawSlide(bctx, w, h, state.slides[state.current], state.current, state.slides.length);
+  $("#count").textContent = `Slide ${String(state.current+1).padStart(2,"0")} / ${String(state.slides.length).padStart(2,"0")}`;
+  renderThumbs();
+  updateNav();
+}
+function renderCurrent(){
+  const {w,h}=FMT[state.format];
+  if(big.width!==w||big.height!==h){big.width=w;big.height=h;}
+  drawSlide(bctx,w,h,state.slides[state.current],state.current,state.slides.length);
+  $("#count").textContent = `Slide ${String(state.current+1).padStart(2,"0")} / ${String(state.slides.length).padStart(2,"0")}`;
+  document.querySelectorAll(".thumb").forEach((t,i)=>t.classList.toggle("on",i===state.current));
+  updateNav();
+}
+function updateNav(){
+  $("#prev").disabled = state.current===0;
+  $("#next").disabled = state.current===state.slides.length-1;
+}
+function renderThumbs(){
+  const {w,h}=FMT[state.format];
+  const box = $("#thumbs"); box.innerHTML="";
+  const tw=124; const th=Math.round(tw*h/w);
+  state.slides.forEach((s,i)=>{
+    const wrap=document.createElement("div");
+    wrap.className="thumb"+(i===state.current?" on":"");
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    c.style.width="62px";
+    drawSlide(c.getContext("2d"),w,h,s,i,state.slides.length);
+    const tag=document.createElement("span"); tag.className="tn"; tag.textContent=String(i+1).padStart(2,"0");
+    wrap.appendChild(c); wrap.appendChild(tag);
+    wrap.onclick=()=>{state.current=i;renderCurrent();};
+    box.appendChild(wrap);
+  });
+}
+
+/* ============================================================
+   EXPORT — single PNG + ZIP (store, no deps)
+   ============================================================ */
+function canvasBlob(cv){return new Promise(r=>cv.toBlob(r,"image/png"));}
+
+async function downloadCurrent(){
+  const cv=document.createElement("canvas");
+  const {w,h}=FMT[state.format]; cv.width=w; cv.height=h;
+  drawSlide(cv.getContext("2d"),w,h,state.slides[state.current],state.current,state.slides.length);
+  const blob=await canvasBlob(cv);
+  triggerDl(blob, `carousel-${String(state.current+1).padStart(2,"0")}.png`);
+}
+
+async function downloadAll(){
+  const btn=$("#dlAll"); const old=btn.textContent; btn.textContent="Forging…"; btn.disabled=true;
+  try{
+    const {w,h}=FMT[state.format];
+    const files=[];
+    for(let i=0;i<state.slides.length;i++){
+      const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+      drawSlide(cv.getContext("2d"),w,h,state.slides[i],i,state.slides.length);
+      const blob=await canvasBlob(cv);
+      const buf=new Uint8Array(await blob.arrayBuffer());
+      files.push({name:`slide-${String(i+1).padStart(2,"0")}.png`, data:buf});
+    }
+    const zip=makeZip(files);
+    triggerDl(new Blob([zip],{type:"application/zip"}), "carouselforge-deck.zip");
+    btn.textContent="✓ Downloaded";
+  }catch(e){ btn.textContent="Error — try again"; console.error(e); }
+  setTimeout(()=>{btn.textContent=old;btn.disabled=false;},1600);
+}
+
+function triggerDl(blob,name){
+  const u=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=u; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(u);a.remove();},500);
+}
+
+/* minimal ZIP (store/no compression) with CRC32 */
+const CRC_TABLE=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+function crc32(buf){let c=0xFFFFFFFF;for(let i=0;i<buf.length;i++)c=CRC_TABLE[(c^buf[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+function makeZip(files){
+  const enc=new TextEncoder();
+  const chunks=[]; const central=[]; let offset=0;
+  const u16=v=>[v&255,(v>>8)&255];
+  const u32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>24)&255];
+  for(const f of files){
+    const name=enc.encode(f.name); const data=f.data; const crc=crc32(data);
+    const local=[].concat([0x50,0x4b,0x03,0x04],u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0));
+    const lh=new Uint8Array(local); chunks.push(lh,name,data);
+    const cen=[].concat([0x50,0x4b,0x01,0x02],u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset));
+    central.push(new Uint8Array(cen),name);
+    offset += lh.length+name.length+data.length;
+  }
+  let cenSize=0; central.forEach(c=>cenSize+=c.length);
+  const cenStart=offset;
+  const eocd=new Uint8Array([].concat([0x50,0x4b,0x05,0x06],u16(0),u16(0),u16(files.length),u16(files.length),u32(cenSize),u32(cenStart),u16(0)));
+  const all=[...chunks,...central,eocd];
+  let total=0; all.forEach(a=>total+=a.length);
+  const out=new Uint8Array(total); let p=0;
+  all.forEach(a=>{out.set(a,p);p+=a.length;});
+  return out;
+}
+
+/* ============================================================
+   THEME SWATCHES + UI WIRING
+   ============================================================ */
+function applyTheme(t){
+  state.theme=t;
+  const r=document.documentElement.style;
+  r.setProperty("--ink",t.ink); r.setProperty("--accent",t.accent); r.setProperty("--paper",t.paper);
+  document.querySelector('meta[name=theme-color]').setAttribute("content",t.ink);
+  renderAll();
+}
+function buildThemeUI(){
+  const box=$("#themes"); box.innerHTML="";
+  THEMES.forEach(t=>{
+    const el=document.createElement("div");
+    el.className="sw"+(t.id===state.theme.id?" on":"");
+    el.innerHTML=`<div class="chips"><i style="background:${t.ink}"></i><i style="background:${t.accent}"></i><i style="background:${t.paper};border:1px solid rgba(0,0,0,.12)"></i></div><small>${t.name}</small>`;
+    el.onclick=()=>{document.querySelectorAll(".sw").forEach(s=>s.classList.remove("on"));el.classList.add("on");applyTheme(t);};
+    box.appendChild(el);
+  });
+}
+
+/* ============================================================
+   PRO — GLM (BYO key, client-side)
+   ============================================================ */
+const CLICHES=["in today's fast-paced","game-changer","unlock your potential","take it to the next level","at the end of the day","when it comes to","needle","leverage synerg","dive deep","in this digital age","revolutionize","seamless","cutting-edge","plethora"];
+function gateCopy(slides){
+  // quality gate: flag bland filler; returns {ok, note}
+  const text=JSON.stringify(slides).toLowerCase();
+  const hits=CLICHES.filter(c=>text.includes(c));
+  return {ok:hits.length===0, note:hits.length?("softened cliché: "+hits[0]):""};
+}
+async function glmGenerate(){
+  const key=$("#glmKey").value.trim();
+  const topic=$("#glmTopic").value.trim();
+  const aud=$("#glmAud").value.trim()||"a general professional audience";
+  const tone=$("#glmTone").value.trim()||"sharp, confident, plain-spoken";
+  const st=$("#glmStatus");
+  if(!key){st.className="status err";st.textContent="Paste your GLM key first.";return;}
+  if(!topic){st.className="status err";st.textContent="Add a topic to write about.";return;}
+  const btn=$("#glmGo"); const old=btn.textContent; btn.textContent="Writing…"; btn.disabled=true;
+  st.className="status"; st.textContent="Contacting z.ai…";
+
+  const sys=`You are a world-class carousel copywriter for LinkedIn and Instagram. You write SHARP, specific, concrete copy. HARD RULES: no clichés, no "in today's fast-paced world", no corporate filler, no hedging. Every hook makes a bold, specific promise. Every slide carries ONE idea. Use real numbers, contrarian framing, and verbs. Slide titles are <= 7 words. Slide bodies are 1-2 punchy sentences, <= 24 words. Output ONLY valid minified JSON, no markdown, matching exactly: {"hook":"","sub":"","slides":[{"title":"","body":""}],"cta_title":"","cta_sub":""}. Provide 5-7 slides.`;
+  const usr=`Topic: ${topic}\nAudience: ${aud}\nTone: ${tone}\nWrite the carousel now as JSON only.`;
+
+  try{
+    const res=await fetch("https://api.z.ai/api/paas/v4/chat/completions",{
+      method:"POST",
+      headers:{"authorization":"Bearer "+key,"content-type":"application/json"},
+      body:JSON.stringify({model:"glm-4.5-flash",thinking:{type:"disabled"},max_tokens:4096,
+        messages:[{role:"system",content:sys},{role:"user",content:usr}]})
+    });
+    if(!res.ok){const tx=await res.text();throw new Error("API "+res.status+": "+tx.slice(0,120));}
+    const j=await res.json();
+    let content=j.choices[0].message.content.trim();
+    content=content.replace(/^```(json)?/i,"").replace(/```$/,"").trim();
+    const m=content.match(/\{[\s\S]*\}/); if(m)content=m[0];
+    const data=JSON.parse(content);
+
+    // gate
+    const gate=gateCopy(data);
+    // populate fields
+    $("#fHook").value=data.hook||$("#fHook").value;
+    $("#fSub").value=data.sub||"";
+    $("#fCtaH").value=data.cta_title||$("#fCtaH").value;
+    $("#fCtaS").value=data.cta_sub||"";
+    $("#fPoints").value=(data.slides||[]).map(s=>`${s.title}\n${s.body}`).join("\n\n");
+
+    renderAll();
+    state.current=0; renderCurrent();
+    st.className="status ok";
+    st.textContent="✓ Forged "+(data.slides||[]).length+" slides"+(gate.ok?" · clean":" · "+gate.note);
+  }catch(e){
+    st.className="status err"; st.textContent="✗ "+e.message;
+  }finally{ btn.textContent=old; btn.disabled=false; }
+}
+
+/* ============================================================
+   HERO — animated flipping deck (CSS/JS)
+   ============================================================ */
+const HERO_SLIDES=[
+  {k:"cover",eb:"Carousel",big:"Stop the<br>scroll.",sub:"5 fixes for carousels that actually get saved.",foot:"@studio",pg:"01 / 06",swipe:"SWIPE →"},
+  {k:"num",n:"01",big:"Lead with the payoff",sub:"If frame one isn't a promise, nobody swipes.",foot:"@studio",pg:"02 / 06"},
+  {k:"num",n:"02",big:"One idea per slide",sub:"Two sentences? That's two slides.",foot:"@studio",pg:"03 / 06"},
+  {k:"num",n:"03",big:"Numbers beat adjectives",sub:'"3x saves" lands. "Effective" evaporates.',foot:"@studio",pg:"04 / 06"},
+  {k:"cta",big:"Steal the system",sub:"One craft breakdown a week.",foot:"@studio",pg:"06 / 06"},
+];
+function heroCardHTML(s){
+  const inv=s.k==="cta"?" invert":"";
+  let mid="";
+  if(s.k==="cover") mid=`<div class="big" style="font-size:2.5rem">${s.big}</div><div class="bar"></div>`;
+  else if(s.k==="num") mid=`<div class="num">${s.n}</div><div class="big" style="font-size:1.5rem;margin-top:14px">${s.big}</div>`;
+  else mid=`<div class="big" style="font-size:2.1rem;margin-top:auto">${s.big}</div><div class="bar"></div>`;
+  return `<div class="slide${inv}">
+    <div class="dotfield"></div>
+    <div class="stop"><span>${s.foot.toUpperCase()}</span><span class="pg">${s.pg}</span></div>
+    ${mid}
+    <div class="sub">${s.sub}</div>
+    <div class="foot"><span>${s.foot.toUpperCase()}</span><span class="swipe">${s.swipe||"→"}</span></div>
+  </div>`;
+}
+function initHero(){
+  const deck=$("#heroDeck"); const dots=$("#heroDots");
+  HERO_SLIDES.forEach((s,i)=>{
+    const c=document.createElement("div"); c.className="card"; c.innerHTML=heroCardHTML(s);
+    deck.appendChild(c);
+    const d=document.createElement("i"); dots.appendChild(d);
+  });
+  const cards=[...deck.children]; const dotEls=[...dots.children];
+  let cur=0;
+  const reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function place(){
+    cards.forEach((c,i)=>{
+      let rel=(i-cur+cards.length)%cards.length;
+      if(rel>2) rel=rel-cards.length;
+      if(rel===0){c.style.transform="translateZ(0) rotateY(0deg) scale(1)";c.style.opacity="1";c.style.zIndex=10;}
+      else if(rel===1){c.style.transform="translate3d(26px,18px,-90px) rotateY(-14deg) scale(.94)";c.style.opacity=".85";c.style.zIndex=9;}
+      else if(rel===2){c.style.transform="translate3d(48px,34px,-180px) rotateY(-22deg) scale(.88)";c.style.opacity=".6";c.style.zIndex=8;}
+      else {c.style.transform="translate3d(-40px,-30px,120px) rotateY(40deg) scale(1.04)";c.style.opacity="0";c.style.zIndex=11;}
+    });
+    dotEls.forEach((d,i)=>d.classList.toggle("on",i===cur));
+  }
+  place();
+  if(!reduced){ setInterval(()=>{cur=(cur+1)%cards.length;place();},2600); }
+}
+
+/* ============================================================
+   EVENTS
+   ============================================================ */
+function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};}
+const liveUpdate=debounce(()=>renderAll(),260);
+
+["fHandle","fHook","fSub","fPoints","fCtaH","fCtaS"].forEach(id=>{
+  document.getElementById(id).addEventListener("input",liveUpdate);
+});
+
+$("#prev").onclick=()=>{if(state.current>0){state.current--;renderCurrent();}};
+$("#next").onclick=()=>{if(state.current<state.slides.length-1){state.current++;renderCurrent();}};
+$("#dlOne").onclick=downloadCurrent;
+$("#dlAll").onclick=downloadAll;
+$("#glmGo").onclick=glmGenerate;
+
+$("#fmtSeg").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b)return;
+  $("#fmtSeg").querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on"); state.format=b.dataset.fmt; renderAll();
+});
+$("#markSeg").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b)return;
+  $("#markSeg").querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on"); state.marks=b.dataset.mark==="on"; renderAll();
+});
+$("#proHead").onclick=()=>$("#pro").classList.toggle("open");
+
+// keyboard arrows when focused near canvas
+document.addEventListener("keydown",e=>{
+  if(e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA")return;
+  if(e.key==="ArrowLeft")$("#prev").click();
+  if(e.key==="ArrowRight")$("#next").click();
+});
+
+// reveal on scroll
+const io=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting)en.target.classList.add("in");}),{threshold:.15});
+document.querySelectorAll(".reveal").forEach(el=>io.observe(el));
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+buildThemeUI();
+initHero();
+renderAll();
+</script>
+</body>
+</html>
